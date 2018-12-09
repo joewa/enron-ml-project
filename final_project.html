@@ -13332,6 +13332,37 @@ numpy:          1.15.4
 </div>
 
 </div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[678]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Number of POI&#39;s: </span><span class="si">{}</span><span class="s2"> (after corrections and additions)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="n">df</span><span class="p">[</span><span class="s2">&quot;poi&quot;</span><span class="p">]</span><span class="o">&gt;</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">size</span><span class="p">))</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+    <div class="prompt"></div>
+
+
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Number of POI&#39;s: 19 (after corrections and additions)
+</pre>
+</div>
+</div>
+
+</div>
+</div>
+
+</div>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
@@ -15025,7 +15056,14 @@ One example is the value of <code>restricted_stock_deferred</code>, which is the
 <li><p><strong>Principal Component Analysis (PCA)</strong>: "is by far the most popular dimensionality reduction algorithm. First it identifies the hyperplane that lies closest to the data, and then it projects the data onto it." Obviously, the PCA method is also unrelated to another classification method.</p>
 </li>
 </ul>
-<p>Please note that, if applicable, the actual values of the feature importance are not discussed because of usage of an automatic process (RFE)</p>
+<p>Please note that, if applicable, the actual values of the feature importance are not discussed because of usage of an automatic process (RFE).</p>
+<p><strong>Feature scaling</strong> is required for some classifiers, others don't need it. When learning rates matter, e.g. in case gradient descent is applied, the gradients are scaled effectively Furthermore, it makes some results easier to understand by humans. Nevertheless, it is rarely harmful when applied.</p>
+<ul>
+<li><code>DecisionTreeClassifier</code> and <code>RandomForest</code> do require feature scaling</li>
+<li><code>NearestCentroid</code> requires feature scaling because euclidean distance measure is applied by default.</li>
+<li><code>LogisticRegression</code> <a href="https://scikit-learn.org/stable/auto_examples/preprocessing/plot_scaling_importance.html">requires feature scaling</a>, particularly if gradient descent/ascent-based optimization is selected.</li>
+<li>The application of <code>PCA</code> requires feature scaling too, because it tries to find the directions of maximizing the variance.</li>
+</ul>
 
 </div>
 </div>
@@ -15046,16 +15084,20 @@ One example is the value of <code>restricted_stock_deferred</code>, which is the
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h2 id="Notes-on-the-Analysis-and-Challenges-of-the-Implementation">Notes on the Analysis and Challenges of the Implementation<a class="anchor-link" href="#Notes-on-the-Analysis-and-Challenges-of-the-Implementation">&#182;</a></h2><ul>
+<h2 id="Parameter-Tuning-and-Notes-on-the-Challenges-of-the-Implementation">Parameter Tuning and Notes on the Challenges of the Implementation<a class="anchor-link" href="#Parameter-Tuning-and-Notes-on-the-Challenges-of-the-Implementation">&#182;</a></h2><p>Parameter tuning means selecting appropriate parameters for all components of a pipeline. Therefore the whole pipeline shall be tuned to achieve a high score in the desired metrics. Overfitting shall be hereby avoided. Obviously, the model will not be trained on the entire dataset, because it would certainly overfit, espcially on small datasets like the current one. The path to a proper solution is outlined following points:</p>
+<ul>
 <li>The <code>Pipeline</code> class is applied to implement multiple sequential transformations</li>
-<li><code>GridSearchCV</code> is applied with <code>StratifiedShuffleSplit</code> to find the best set of parameters of the full Pipeline</li>
+<li><code>GridSearchCV</code> is applied with <code>StratifiedShuffleSplit</code> to find the best set of parameters of the full Pipeline.</li>
 <li>The usage of <code>StratifiedShuffleSplit</code> reliably prevents overfitting off a classifer this small dataset.</li>
+<li><code>GridSearchCV</code> can be used not only to search through a grid of parameters but can be used to change the components of a pipeline. In the <em>first step</em>, <code>GridSearchCV</code> is used to search for an appropriate combination of all components of the pipeline including the classifer.</li>
+<li>Trying a few combinations of parameters is required even in the first stage anyway, because e.g. a classifiers default set of parameters might be totaly inappropriate for the present dataset, although it might perform well with a suitable set of parameters.</li>
 <li><code>GridSearchCV</code> is sequentially called in loops with every element of a <code>param_grid</code> (while every element defines itself define a parameter grid). The the resulting best classifier of every element is then stored in the list <code>clf_results</code>.</li>
 <li>The concept of <code>RFE</code> turned out to be very complex to implement when applied with <code>GridSearchCV</code> and a pipeline with many steps. As RFE is applied to the selected classifier, the classifier including the actual set of parameters must be provided as a parameter. This breaks the concept of GridSearchCV. I found and tested two methods to apply RFE with a pipeline:<ul>
 <li>Application of the helper function <code>handle_grid_with_RFE(param_grid)</code> creates a new modified ParameterGrid to enforce, that RFE gets always provided the same classifier that is applied in the following step of the pipeline.</li>
 <li>Passing RFE with the whole pipeline as a parameter to GridSearchCV: <code>GridSearchCV(RFE(**{"estimator":mypipe, **rfe_kwargs}), param_grid=[param_grid_clf], cv=sss, scoring="f1", n_jobs=1)</code>. Unfortunately, <code>n_jobs</code> must be set to 1 due to a bug in joblib or sklearn resulting in extremely poor computation times.</li>
 </ul>
 </li>
+<li>When the best pipeline and the best features are selected, the <code>GridSearchCV</code> is applied again with a more fine grained set of parameters.</li>
 </ul>
 <h2 id="Evaluation-Metrics">Evaluation Metrics<a class="anchor-link" href="#Evaluation-Metrics">&#182;</a></h2><p>The most common evaluation metrics are $accuracy$, $precision$, $recall$ and the $F_1 $ score.</p>
 <h3 id="Accuracy">Accuracy<a class="anchor-link" href="#Accuracy">&#182;</a></h3><p>The accuracy is simply the ratio of correctly predicted labels to the total predictions.</p>
@@ -15067,6 +15109,7 @@ One example is the value of <code>restricted_stock_deferred</code>, which is the
 <h3 id="Recall">Recall<a class="anchor-link" href="#Recall">&#182;</a></h3><p>Precision is typically used along with another metric named recall. Its the ratio of positive instances that are correctly detected by the classifier:</p>
 <p>$ recall = \frac{TP}{TP+FN} $</p>
 <p>FN is the number of false negatives.</p>
+<p>This metric is particularly relevant for the present use case, because a high recall means that most POI's have been identified. So it is more important than precision here: Having a few false alerts (FP) is probably is probably fine when almost all POI's get caught in the end. The misclassified innocents will be (hopefully) declared innocent after an appropriate police investigation.</p>
 <h3 id="F1-Score">F1 Score<a class="anchor-link" href="#F1-Score">&#182;</a></h3><p>It is often convenient to combine precision and recall into a single metric called the $F_1 $ score, in
 particular if you need a simple way to compare two classifiers. The $F_1 $ score is the harmonic mean of
 precision and recall.</p>
@@ -16710,7 +16753,10 @@ dot -Tpng files/test_tree.dot -o files/DecisionTreeClassifier.png
 <li>Blog post: <a href="https://explained.ai/rf-importance/index.html">Beware Default Random Forest Importances</a></li>
 <li>From datascience.stackexchange: <a href="https://datascience.stackexchange.com/questions/17755/will-cross-validation-performance-be-an-accurate-indication-for-predicting-the-t/17835#17835">Will cross validation performance be an accurate indication for predicting the true performance on an independent data set?</a></li>
 <li>sklearn-evaluation package documentation <a href="https://blancas.io/sklearn-evaluation/user_guide/grid_search.html">Evaluating Grid Search Results</a></li>
+<li><a href="https://sebastianraschka.com/Articles/2014_about_feature_scaling.html">About Feature Scaling and Normalization - and the effect of standardization for machine learning algorithms</a></li>
 <li>Scikit-learn documentation: <a href="https://scikit-learn.org/stable/modules/preprocessing.html#custom-transformers">Preprocessing data</a></li>
+<li><a href="https://scikit-learn.org/stable/auto_examples/preprocessing/plot_scaling_importance.html">Importance of Feature Scaling</a></li>
+<li><a href="https://www.dataschool.io/comparing-supervised-learning-algorithms/">Comparing supervised learning algorithms</a></li>
 <li><a href="https://towardsdatascience.com/how-to-visualize-a-decision-tree-from-a-random-forest-in-python-using-scikit-learn-38ad2d75f21c">How to Visualize a Decision Tree from a Random Forest in Python using Scikit-Learn</a></li>
 <li>Scikit-learn documentation: <a href="http://scikit-learn.org/dev/developers/advanced_installation.html#install-bleeding-edge">Advanced installation instructions</a></li>
 <li><a href="https://avolkov.github.io/installing-python-packages-in-development-mode.html">Installing python packages in development mode</a></li>
@@ -16718,6 +16764,19 @@ dot -Tpng files/test_tree.dot -o files/DecisionTreeClassifier.png
 
 </div>
 </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[&nbsp;]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span> 
+</pre></div>
+
+    </div>
+</div>
+</div>
+
 </div>
     </div>
   </div>
